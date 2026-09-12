@@ -10,12 +10,12 @@
 [workspace]
 
 [package]
-name = "xmip-template-rust"
+name = "xmip-core-authorize-abac"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/IlleNilsson/xmip-template-rust"
-description = "Starter template for a Rust Xmip module repository."
+repository = "https://github.com/IlleNilsson/xmip-core-authorize-abac"
+description = "Authorize by abac: decides by attribute rules over the identity's facts and the attempt; a transport-layer policy."
 publish = false
 
 [lib]
