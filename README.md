@@ -1,6 +1,6 @@
 # xmip-core-authorize-abac
 
-Attribute-based authorization: ordered rules whose condition is an expression over the identity's facts, the attempt and the clock, with and, or, not, equals, in, matches, before and after. A technology of [xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
+Attribute-based authorization: rules that permit or deny where attributes of the identity's facts and the attempt compare with values by equals, not-equals, in and starts-with, combined with all-of and any-of. A technology of [xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
 
 ## Toolchain
 
