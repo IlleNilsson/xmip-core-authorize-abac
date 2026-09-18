@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/IlleNilsson/xmip-core-authorize-abac"
-description = "Attribute-based authorization: ordered rules whose condition is an expression over the identity's facts, the attempt and the clock, with and, or, not, equals, in, matches, before and after. A xmip-core-authorize technology."
+description = "Attribute-based authorization: rules that permit or deny where attributes of the identity's facts and the attempt compare with values by equals, not-equals, in and starts-with, combined with all-of and any-of. A xmip-core-authorize technology."
 publish = false
 
 [lib]
