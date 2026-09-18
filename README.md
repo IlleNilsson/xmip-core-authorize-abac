@@ -1,12 +1,6 @@
 # xmip-core-authorize-abac
 
-Authorize by abac: decides by attribute rules over the identity's facts and the attempt; a transport-layer policy. A technology of
-[xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
-
-Declared and not yet written; `architecture.toml` carries the maturity. When
-it is written it implements `Authorizer`, one mechanism at one gate (ADR-0050).
-What it may depend on is `repository-model.md` section 4 and ADR-0044: its
-capability, and no sibling.
+Attribute-based authorization: ordered rules whose condition is an expression over the identity's facts, the attempt and the clock, with and, or, not, equals, in, matches, before and after. A technology of [xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
 
 ## Toolchain
 
