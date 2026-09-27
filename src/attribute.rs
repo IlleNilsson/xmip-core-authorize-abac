@@ -66,11 +66,10 @@ impl Attribute {
             ),
             Self::Party => accountable.party_id.map(|party| party.to_string()),
             Self::Value => Some(accountable.value.clone()),
-            Self::Evidence(wanted) => std::iter::once(accountable)
-                .chain(identity.message.as_ref())
-                .flat_map(|held| held.evidence.iter())
-                .find(|(name, _)| name == wanted)
-                .map(|(_, value)| value.clone()),
+            Self::Evidence(wanted) => identity
+                .held()
+                .find_map(|held| held.evidence(wanted))
+                .map(ToString::to_string),
             Self::Action => Some(attempt.action.to_string()),
             Self::Artifact => Some(attempt.artifact.clone()),
             Self::Location => match attempt.action {
