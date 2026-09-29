@@ -24,7 +24,7 @@ pub enum Attribute {
     /// The Party the identity resolved to, as its identifier reads. Absent
     /// where it resolved to none.
     Party,
-    /// The value the identity presented — `CN=partner-x.example`.
+    /// The value the identity presented — `CN=party-x.example`.
     Value,
     /// A claim or any other evidence the gate recorded, by name. Absent
     /// where the record carries none under that name.
@@ -111,7 +111,7 @@ mod tests {
             Alignment::None,
             AuthenticatedIdentity::new(
                 mechanism::mutual_tls(),
-                "CN=partner-x.example",
+                "CN=party-x.example",
                 Established::Passed,
                 Verified::Proven,
             )
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn an_attribute_reads_the_accountable_identity_and_the_attempt() {
-        let attempt = Attempt::new(Action::Receive, "partner-x").on_contract("X12-850");
+        let attempt = Attempt::new(Action::Receive, "party-x").on_contract("X12-850");
         let read = |attribute: Attribute| attribute.read(&facts(), &attempt);
 
         assert_eq!(read(Attribute::Mechanism).as_deref(), Some("mutual-tls"));
@@ -143,10 +143,10 @@ mod tests {
         );
         assert_eq!(
             read(Attribute::Value).as_deref(),
-            Some("CN=partner-x.example")
+            Some("CN=party-x.example")
         );
         assert_eq!(read(Attribute::Action).as_deref(), Some("receive"));
-        assert_eq!(read(Attribute::Artifact).as_deref(), Some("partner-x"));
+        assert_eq!(read(Attribute::Artifact).as_deref(), Some("party-x"));
         assert_eq!(read(Attribute::Contract).as_deref(), Some("X12-850"));
         assert_eq!(read(Attribute::Path), None);
     }
