@@ -233,7 +233,7 @@ mod tests {
             "an Xmip Process is not a Location"
         );
         assert_eq!(
-            Abac::new().decide(&address(), &Attempt::new(Action::Receive, "partner-x")),
+            Abac::new().decide(&address(), &Attempt::new(Action::Receive, "party-x")),
             None
         );
     }
@@ -249,11 +249,11 @@ mod tests {
         ));
 
         assert_eq!(
-            policy.decide(&token("sales"), &Attempt::new(Action::Receive, "partner-x")),
+            policy.decide(&token("sales"), &Attempt::new(Action::Receive, "party-x")),
             Some(Decision::Allowed)
         );
         assert_eq!(
-            policy.decide(&address(), &Attempt::new(Action::Receive, "partner-x")),
+            policy.decide(&address(), &Attempt::new(Action::Receive, "party-x")),
             None,
             "an identity that resolved to no Party satisfies no rule about one"
         );
