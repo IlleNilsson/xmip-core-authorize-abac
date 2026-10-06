@@ -34,7 +34,7 @@ pub enum Attribute {
     /// The artifact the attempt is on, whatever it is.
     Artifact,
     /// The artifact where it is a Location — the attempt receives or sends.
-    /// Absent on an Xmip Process, which is not a Location.
+    /// Absent on a Work Process, which is not a Location.
     Location,
     /// The Contract, where one has been identified.
     Contract,

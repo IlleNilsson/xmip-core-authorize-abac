@@ -230,7 +230,7 @@ mod tests {
                 &Attempt::new(Action::Process, "Billing-EU")
             ),
             None,
-            "an Xmip Process is not a Location"
+            "a Work Process is not a Location"
         );
         assert_eq!(
             Abac::new().decide(&address(), &Attempt::new(Action::Receive, "party-x")),
