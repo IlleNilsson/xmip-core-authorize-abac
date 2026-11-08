@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn holds(condition: &Condition) -> bool {
-        condition.holds(&facts(), &Attempt::new(Action::Send, "Billing-EU"))
+        condition.holds(&facts(), &Attempt::now(Action::Send, "Billing-EU"))
     }
 
     #[test]

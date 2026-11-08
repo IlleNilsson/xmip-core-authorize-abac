@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn an_attribute_reads_the_accountable_identity_and_the_attempt() {
-        let attempt = Attempt::new(Action::Receive, "party-x").on_contract("X12-850");
+        let attempt = Attempt::now(Action::Receive, "party-x").on_contract("X12-850");
         let read = |attribute: Attribute| attribute.read(&facts(), &attempt);
 
         assert_eq!(read(Attribute::Mechanism).as_deref(), Some("mutual-tls"));
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn evidence_is_found_on_either_layer_and_a_process_is_not_a_location() {
-        let process = Attempt::new(Action::Process, "Approval");
+        let process = Attempt::now(Action::Process, "Approval");
 
         assert_eq!(
             Attribute::evidence("issuer")
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(Attribute::Location.read(&facts(), &process), None);
         assert_eq!(
             Attribute::Location
-                .read(&facts(), &Attempt::new(Action::Send, "Billing"))
+                .read(&facts(), &Attempt::now(Action::Send, "Billing"))
                 .as_deref(),
             Some("Billing")
         );

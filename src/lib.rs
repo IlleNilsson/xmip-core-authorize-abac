@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn a_permitting_rule_whose_condition_holds_allows() {
-        let decision = abac().decide(&token("billing"), &Attempt::new(Action::Send, "Billing-EU"));
+        let decision = abac().decide(&token("billing"), &Attempt::now(Action::Send, "Billing-EU"));
 
         assert_eq!(decision, Some(Decision::Allowed));
         assert_eq!(abac().name(), "abac");
@@ -209,7 +209,7 @@ mod tests {
         // The address is on the LAN and the last rule would permit it; the
         // rule before it refuses whatever proves nothing, and a denial ends it.
         let decision = abac()
-            .decide(&address(), &Attempt::new(Action::Send, "Billing-EU"))
+            .decide(&address(), &Attempt::now(Action::Send, "Billing-EU"))
             .expect("an opinion");
 
         assert_eq!(
@@ -221,19 +221,19 @@ mod tests {
     #[test]
     fn no_rule_matching_is_no_opinion() {
         assert_eq!(
-            abac().decide(&token("sales"), &Attempt::new(Action::Send, "Billing-EU")),
+            abac().decide(&token("sales"), &Attempt::now(Action::Send, "Billing-EU")),
             None
         );
         assert_eq!(
             abac().decide(
                 &token("billing"),
-                &Attempt::new(Action::Process, "Billing-EU")
+                &Attempt::now(Action::Process, "Billing-EU")
             ),
             None,
             "a Work Process is not a Location"
         );
         assert_eq!(
-            Abac::new().decide(&address(), &Attempt::new(Action::Receive, "party-x")),
+            Abac::new().decide(&address(), &Attempt::now(Action::Receive, "party-x")),
             None
         );
     }
@@ -249,11 +249,11 @@ mod tests {
         ));
 
         assert_eq!(
-            policy.decide(&token("sales"), &Attempt::new(Action::Receive, "party-x")),
+            policy.decide(&token("sales"), &Attempt::now(Action::Receive, "party-x")),
             Some(Decision::Allowed)
         );
         assert_eq!(
-            policy.decide(&address(), &Attempt::new(Action::Receive, "party-x")),
+            policy.decide(&address(), &Attempt::now(Action::Receive, "party-x")),
             None,
             "an identity that resolved to no Party satisfies no rule about one"
         );
