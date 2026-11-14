@@ -1,11 +1,21 @@
-//! An attribute: one thing a rule may read off the record or the attempt.
+//! An attribute: one thing a rule's expression may read off the record or
+//! the attempt, by the name the expression writes it as.
 
 use authorize::{Action, Attempt};
 use context::IdentityFacts;
+use path::expression::{Condition, Names, Operand};
+use std::cell::OnceCell;
 use std::fmt;
 use xcore::Assurance;
 
-/// One thing a rule may read.
+/// The prefix of a name that reads a claim or other evidence by its name:
+/// `evidence:department`.
+pub const EVIDENCE: &str = "evidence:";
+
+/// One thing a rule may read, and the name its expression reads it by:
+/// `mechanism`, `class`, `assurance`, `party`, `value`, `action`,
+/// `artifact`, `location`, `contract`, `path`, or `evidence:` before a
+/// claim's name.
 ///
 /// The identity attributes are the accountable identity's — the transport
 /// one — because this is a transport-layer policy (ADR-0019 clause 6).
@@ -43,60 +53,141 @@ pub enum Attribute {
 }
 
 impl Attribute {
+    /// Every attribute read by a word of its own, in the order a designer
+    /// offers them; evidence is read by [`EVIDENCE`] and a claim's name.
+    pub const WORDS: [Self; 10] = [
+        Self::Mechanism,
+        Self::Class,
+        Self::Assurance,
+        Self::Party,
+        Self::Value,
+        Self::Action,
+        Self::Artifact,
+        Self::Location,
+        Self::Contract,
+        Self::Path,
+    ];
+
     /// A claim or other evidence, by the name the gate recorded it under.
     #[must_use]
     pub fn evidence(name: impl Into<String>) -> Self {
         Self::Evidence(name.into())
     }
 
-    /// What the record and the attempt say, or `None` where they say nothing.
+    /// The attribute an expression's `name` reads, or `None` where it reads
+    /// none.
     #[must_use]
-    pub fn read(&self, identity: &IdentityFacts, attempt: &Attempt) -> Option<String> {
-        let accountable = identity.accountable();
+    pub fn named(name: &str) -> Option<Self> {
+        match name.strip_prefix(EVIDENCE) {
+            Some(claim) => Some(Self::evidence(claim)),
+            None => Self::WORDS
+                .into_iter()
+                .find(|attribute| attribute.word() == Some(name)),
+        }
+    }
 
-        match self {
-            Self::Mechanism => Some(accountable.mechanism.name().to_string()),
-            Self::Class => Some(accountable.class().to_string()),
-            Self::Assurance => Some(
-                match accountable.mechanism.assurance() {
-                    Assurance::Identifies => "identifies",
-                    Assurance::Authenticates => "authenticates",
-                }
-                .to_string(),
-            ),
-            Self::Party => accountable.party_id.map(|party| party.to_string()),
-            Self::Value => Some(accountable.value.clone()),
-            Self::Evidence(wanted) => identity
-                .held()
-                .find_map(|held| held.evidence(wanted))
-                .map(ToString::to_string),
-            Self::Action => Some(attempt.action.to_string()),
-            Self::Artifact => Some(attempt.artifact.clone()),
-            Self::Location => match attempt.action {
-                Action::Receive | Action::Send => Some(attempt.artifact.clone()),
-                Action::Process => None,
-            },
-            Self::Contract => attempt.contract.clone(),
-            Self::Path => attempt.path.clone(),
+    /// It begins with `prefix`, every `%`, `_` and `\` in the prefix
+    /// matching only itself (`path::expression::Condition::starts_with`):
+    /// a rule about a Party's or a Location's prefix names that prefix and
+    /// nothing wider.
+    #[must_use]
+    pub fn starts_with(&self, prefix: &str) -> Condition {
+        Condition::starts_with(Operand::Name(self.to_string()), prefix)
+    }
+
+    /// The word it is read by; `None` for evidence, read by its claim's
+    /// name.
+    #[must_use]
+    pub const fn word(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Mechanism => "mechanism",
+            Self::Class => "class",
+            Self::Assurance => "assurance",
+            Self::Party => "party",
+            Self::Value => "value",
+            Self::Action => "action",
+            Self::Artifact => "artifact",
+            Self::Location => "location",
+            Self::Contract => "contract",
+            Self::Path => "path",
+            Self::Evidence(_) => return None,
+        })
+    }
+}
+
+/// The name an expression reads it by.
+impl fmt::Display for Attribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (self, self.word()) {
+            (Self::Evidence(claim), _) => write!(f, "{EVIDENCE}{claim}"),
+            (_, word) => f.write_str(word.unwrap_or_default()),
         }
     }
 }
 
-impl fmt::Display for Attribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mechanism => f.write_str("mechanism"),
-            Self::Class => f.write_str("class"),
-            Self::Assurance => f.write_str("assurance"),
-            Self::Party => f.write_str("party"),
-            Self::Value => f.write_str("value"),
-            Self::Evidence(name) => write!(f, "evidence '{name}'"),
-            Self::Action => f.write_str("action"),
-            Self::Artifact => f.write_str("artifact"),
-            Self::Location => f.write_str("location"),
-            Self::Contract => f.write_str("contract"),
-            Self::Path => f.write_str("path"),
+/// What a rule's expression reads: the record and the attempt, each
+/// attribute by its name. A word the record holds as a value of its own —
+/// the class, the action, the Party's identifier — is written once, the
+/// first time a name asks for it.
+pub(crate) struct Read<'a> {
+    identity: &'a IdentityFacts,
+    attempt: &'a Attempt,
+    class: OnceCell<String>,
+    action: OnceCell<String>,
+    party: OnceCell<Option<String>>,
+}
+
+impl<'a> Read<'a> {
+    pub(crate) fn new(identity: &'a IdentityFacts, attempt: &'a Attempt) -> Self {
+        Self {
+            identity,
+            attempt,
+            class: OnceCell::new(),
+            action: OnceCell::new(),
+            party: OnceCell::new(),
         }
+    }
+
+    /// What the record and the attempt say of `attribute`, or `None` where
+    /// they say nothing.
+    pub(crate) fn read(&self, attribute: &Attribute) -> Option<&str> {
+        let accountable = self.identity.accountable();
+        let attempt = self.attempt;
+
+        match attribute {
+            Attribute::Mechanism => Some(accountable.mechanism.name()),
+            Attribute::Class => Some(self.class.get_or_init(|| accountable.class().to_string())),
+            Attribute::Assurance => Some(match accountable.mechanism.assurance() {
+                Assurance::Identifies => "identifies",
+                Assurance::Authenticates => "authenticates",
+            }),
+            Attribute::Party => self
+                .party
+                .get_or_init(|| accountable.party_id.map(|party| party.to_string()))
+                .as_deref(),
+            Attribute::Value => Some(&accountable.value),
+            Attribute::Evidence(wanted) => {
+                self.identity.held().find_map(|held| held.evidence(wanted))
+            }
+            Attribute::Action => Some(self.action.get_or_init(|| attempt.action.to_string())),
+            Attribute::Artifact => Some(&attempt.artifact),
+            Attribute::Location => match attempt.action {
+                Action::Receive | Action::Send => Some(&attempt.artifact),
+                Action::Process => None,
+            },
+            Attribute::Contract => attempt.contract.as_deref(),
+            Attribute::Path => attempt.path.as_deref(),
+        }
+    }
+}
+
+impl Names for Read<'_> {
+    fn value(&self, name: &str) -> Option<&str> {
+        self.read(&Attribute::named(name)?)
+    }
+
+    fn absent(&self, name: &str) -> String {
+        format!("the identity's facts and the attempt say nothing of {name}")
     }
 }
 
@@ -131,49 +222,48 @@ mod tests {
 
     #[test]
     fn an_attribute_reads_the_accountable_identity_and_the_attempt() {
+        let facts = facts();
         let attempt = Attempt::now(Action::Receive, "party-x").on_contract("X12-850");
-        let read = |attribute: Attribute| attribute.read(&facts(), &attempt);
+        let read = Read::new(&facts, &attempt);
 
-        assert_eq!(read(Attribute::Mechanism).as_deref(), Some("mutual-tls"));
-        assert_eq!(read(Attribute::Class).as_deref(), Some("highAssurance"));
-        assert_eq!(read(Attribute::Assurance).as_deref(), Some("authenticates"));
+        assert_eq!(read.value("mechanism"), Some("mutual-tls"));
+        assert_eq!(read.value("class"), Some("highAssurance"));
+        assert_eq!(read.value("assurance"), Some("authenticates"));
         assert_eq!(
-            read(Attribute::Party).as_deref(),
+            read.value("party"),
             Some("00000000-0000-0000-0000-000000000007")
         );
-        assert_eq!(
-            read(Attribute::Value).as_deref(),
-            Some("CN=party-x.example")
-        );
-        assert_eq!(read(Attribute::Action).as_deref(), Some("receive"));
-        assert_eq!(read(Attribute::Artifact).as_deref(), Some("party-x"));
-        assert_eq!(read(Attribute::Contract).as_deref(), Some("X12-850"));
-        assert_eq!(read(Attribute::Path), None);
+        assert_eq!(read.value("value"), Some("CN=party-x.example"));
+        assert_eq!(read.value("action"), Some("receive"));
+        assert_eq!(read.value("artifact"), Some("party-x"));
+        assert_eq!(read.value("contract"), Some("X12-850"));
+        assert_eq!(read.value("path"), None);
+        assert_eq!(read.value("Mechanism"), None, "a word is read as written");
     }
 
     #[test]
     fn evidence_is_found_on_either_layer_and_a_process_is_not_a_location() {
+        let facts = facts();
         let process = Attempt::now(Action::Process, "Approval");
+        let read = Read::new(&facts, &process);
 
-        assert_eq!(
-            Attribute::evidence("issuer")
-                .read(&facts(), &process)
-                .as_deref(),
-            Some("CN=Example CA")
-        );
-        assert_eq!(
-            Attribute::evidence("department")
-                .read(&facts(), &process)
-                .as_deref(),
-            Some("billing")
-        );
-        assert_eq!(Attribute::evidence("group").read(&facts(), &process), None);
-        assert_eq!(Attribute::Location.read(&facts(), &process), None);
-        assert_eq!(
-            Attribute::Location
-                .read(&facts(), &Attempt::now(Action::Send, "Billing"))
-                .as_deref(),
-            Some("Billing")
-        );
+        assert_eq!(read.value("evidence:issuer"), Some("CN=Example CA"));
+        assert_eq!(read.value("evidence:department"), Some("billing"));
+        assert_eq!(read.value("evidence:group"), None);
+        assert_eq!(read.value("location"), None);
+        let send = Attempt::now(Action::Send, "Billing");
+        assert_eq!(Read::new(&facts, &send).value("location"), Some("Billing"));
+    }
+
+    #[test]
+    fn every_attribute_is_named_by_what_it_writes() {
+        let every = Attribute::WORDS
+            .into_iter()
+            .chain([Attribute::evidence("department")]);
+        for attribute in every {
+            assert_eq!(Attribute::named(&attribute.to_string()), Some(attribute));
+        }
+        assert_eq!(Attribute::evidence("group").to_string(), "evidence:group");
+        assert_eq!(Attribute::named("header:http.x-channel"), None);
     }
 }

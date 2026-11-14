@@ -4,12 +4,16 @@
 //!
 //! One policy at the transport layer: attribute rules over the identity's
 //! facts and the attempt (ADR-0050 section 5). A [`Rule`] permits or denies
-//! where its [`Condition`] holds, and a condition compares an [`Attribute`]
-//! — the mechanism, its class and assurance, the Party, a claim or other
-//! evidence by name, the action, the artifact, the Location — with a value
-//! by equals, not-equals, in or starts-with, combined with all-of and any-of.
-//! Rules are built from values; this crate has no rule language of its own
-//! to parse, because a deployment that wants one has `policy` and `cedar`.
+//! where its condition holds. The condition is written in Xmip's one
+//! expression language (ADR-0066 clause 2, `xmip-core-path`'s
+//! `expression`), over the names of the [`Attribute`]s — the mechanism, its
+//! class and assurance, the Party, a claim or other evidence by name, the
+//! action, the artifact, the Location: `evidence:department = 'billing' and
+//! location like 'Billing%'`. It is compiled once and decided from its tree,
+//! in the language's three truths: an attribute the record does not carry
+//! is unknown, and only true holds, so a rule that denies whoever is not
+//! Party 7 is not satisfied by an identity that resolved to no Party at
+//! all. This crate has no condition of its own to parse or decide.
 //!
 //! The first denying rule whose condition holds stands, naming the rule;
 //! failing that, a permitting rule whose condition holds allows; where no
@@ -18,14 +22,14 @@
 //! gates before this one recorded.
 
 pub mod attribute;
-pub mod condition;
 
-use authorize::{Attempt, Authorizer, Decision};
+use attribute::Read;
+use authorize::{Attempt, AuthorizeError, Authorizer, Decision};
 use context::IdentityFacts;
+use path::expression::Expression;
 use xcore::Layer;
 
-pub use attribute::Attribute;
-pub use condition::{Condition, Operator};
+pub use attribute::{Attribute, EVIDENCE};
 
 /// The manifest leaf, and the name a denial carries.
 pub const NAME: &str = "abac";
@@ -44,28 +48,49 @@ pub enum Effect {
 pub struct Rule {
     name: String,
     effect: Effect,
-    condition: Condition,
+    condition: Expression,
 }
 
 impl Rule {
     /// A rule that permits where the condition holds.
-    #[must_use]
-    pub fn permit(name: impl Into<String>, condition: Condition) -> Self {
-        Self {
-            name: name.into(),
-            effect: Effect::Permit,
-            condition,
-        }
+    ///
+    /// # Errors
+    /// The condition reads a name that is no [`Attribute`].
+    pub fn permit(name: impl Into<String>, condition: Expression) -> Result<Self, AuthorizeError> {
+        Self::new(name.into(), Effect::Permit, condition)
     }
 
     /// A rule that denies where the condition holds.
-    #[must_use]
-    pub fn deny(name: impl Into<String>, condition: Condition) -> Self {
-        Self {
-            name: name.into(),
-            effect: Effect::Deny,
-            condition,
+    ///
+    /// # Errors
+    /// The condition reads a name that is no [`Attribute`].
+    pub fn deny(name: impl Into<String>, condition: Expression) -> Result<Self, AuthorizeError> {
+        Self::new(name.into(), Effect::Deny, condition)
+    }
+
+    /// A name no attribute answers would leave the condition unknown at
+    /// every attempt, so it is refused here, once, in words.
+    fn new(name: String, effect: Effect, condition: Expression) -> Result<Self, AuthorizeError> {
+        if let Some(unread) = condition
+            .names()
+            .into_iter()
+            .find(|read| Attribute::named(read).is_none())
+        {
+            let words: Vec<&str> = Attribute::WORDS
+                .iter()
+                .filter_map(Attribute::word)
+                .collect();
+            return Err(AuthorizeError::new(format!(
+                "rule '{name}' reads {unread}, which is no attribute: it reads {}, or \
+                 {EVIDENCE} and a claim's name",
+                words.join(", ")
+            )));
         }
+        Ok(Self {
+            name,
+            effect,
+            condition,
+        })
     }
 
     /// The name a denial by this rule carries.
@@ -78,6 +103,12 @@ impl Rule {
     #[must_use]
     pub const fn effect(&self) -> Effect {
         self.effect
+    }
+
+    /// The condition, as it was written.
+    #[must_use]
+    pub const fn condition(&self) -> &Expression {
+        &self.condition
     }
 }
 
@@ -112,10 +143,11 @@ impl Authorizer for Abac {
     }
 
     fn decide(&self, identity: &IdentityFacts, attempt: &Attempt) -> Option<Decision> {
+        let read = Read::new(identity, attempt);
         let mut permitted = false;
 
         for rule in &self.rules {
-            if !rule.condition.holds(identity, attempt) {
+            if !rule.condition.evaluate(&read).holds() {
                 continue;
             }
 
@@ -172,27 +204,106 @@ mod tests {
         )
     }
 
+    fn expression(text: &str) -> Expression {
+        Expression::parse(text).expect("an expression")
+    }
+
+    fn permit(name: &str, condition: &str) -> Rule {
+        Rule::permit(name, expression(condition)).expect("a rule")
+    }
+
     fn abac() -> Abac {
         Abac::new()
-            .rule(Rule::permit(
+            .rule(permit(
                 "billing-sends-billing",
-                Condition::all_of([
-                    Condition::equals(Attribute::evidence("department"), "billing"),
-                    Condition::equals(Attribute::Action, "send"),
-                    Condition::starts_with(Attribute::Location, "Billing"),
-                ]),
+                "evidence:department = 'billing' and action = 'send' and location like 'Billing%'",
             ))
-            .rule(Rule::deny(
-                "unproven-never-sends",
-                Condition::all_of([
-                    Condition::equals(Attribute::Assurance, "identifies"),
-                    Condition::is_in(Attribute::Action, ["send", "process"]),
-                ]),
-            ))
-            .rule(Rule::permit(
-                "the-lan-sends",
-                Condition::starts_with(Attribute::Value, "10."),
-            ))
+            .rule(
+                Rule::deny(
+                    "unproven-never-sends",
+                    expression("assurance = 'identifies' and action in ('send', 'process')"),
+                )
+                .expect("a rule"),
+            )
+            .rule(permit("the-lan-sends", "value like '10.%'"))
+    }
+
+    /// Whether `condition` holds for a token from billing sending to
+    /// Billing-EU.
+    fn holds(condition: &str) -> bool {
+        let rule = permit("asked", condition);
+        let attempt = Attempt::now(Action::Send, "Billing-EU");
+        Abac::new().rule(rule).decide(&token("billing"), &attempt) == Some(Decision::Allowed)
+    }
+
+    #[test]
+    fn each_operator_compares_what_was_read_with_what_the_rule_names() {
+        assert!(holds("mechanism = 'jwt'"));
+        assert!(!holds("mechanism = 'ip'"));
+        assert!(holds("action <> 'receive'"));
+        assert!(!holds("action <> 'send'"));
+        assert!(holds("evidence:department in ('sales', 'billing')"));
+        assert!(!holds("evidence:department in ('sales')"));
+        assert!(holds("artifact like 'Billing%'"));
+        assert!(!holds("artifact like 'Shipping%'"));
+    }
+
+    #[test]
+    fn an_absent_attribute_satisfies_nothing_not_even_not_equals() {
+        assert!(!holds("contract = 'anything'"));
+        assert!(!holds("contract <> 'anything'"));
+        assert!(!holds("evidence:group <> 'admins'"));
+        assert!(!holds("not evidence:group = 'admins'"));
+    }
+
+    #[test]
+    fn and_needs_every_one_and_or_needs_one() {
+        let (yes, no) = ("action = 'send'", "action = 'receive'");
+
+        assert!(holds(&format!("{yes} and {yes}")));
+        assert!(!holds(&format!("{yes} and {no}")));
+        assert!(holds(&format!("{no} or {yes}")));
+        assert!(!holds(&format!("{no} or {no}")));
+        assert!(holds("true"));
+        assert!(!holds("false"));
+        assert!(holds(&format!("{yes} and ({no} or ({yes}))")));
+    }
+
+    #[test]
+    fn a_prefix_rule_s_underscore_and_percent_match_only_themselves() {
+        let prefixed = |prefix: &str| {
+            let condition = Expression::from_condition(Attribute::Artifact.starts_with(prefix))
+                .expect("compiles");
+            Abac::new().rule(Rule::permit("prefixed", condition).expect("a rule"))
+        };
+        let allows = |policy: &Abac, artifact: &str| {
+            let attempt = Attempt::now(Action::Send, artifact);
+            policy.decide(&token("billing"), &attempt) == Some(Decision::Allowed)
+        };
+
+        let underscore = prefixed("Billing_");
+        assert!(allows(&underscore, "Billing_EU"));
+        assert!(
+            !allows(&underscore, "BillingXEU"),
+            "_ is not any one character"
+        );
+        let percent = prefixed("100%");
+        assert!(allows(&percent, "100%-off"));
+        assert!(!allows(&percent, "1000"), "% is not any run");
+        let backslash = prefixed(r"a\b");
+        assert!(allows(&backslash, r"a\bc"));
+        assert!(!allows(&backslash, "abc"));
+    }
+
+    #[test]
+    fn a_rule_that_reads_no_attribute_is_refused_in_words() {
+        let refused = Rule::deny("typo", expression("mechansim = 'ip'")).expect_err("no attribute");
+
+        assert!(
+            refused.to_string().contains("rule 'typo' reads mechansim"),
+            "{refused}"
+        );
+        assert!(refused.to_string().contains("evidence:"), "{refused}");
     }
 
     #[test]
@@ -240,12 +351,10 @@ mod tests {
 
     #[test]
     fn a_rule_may_be_written_about_the_party_and_the_class() {
-        let policy = Abac::new().rule(Rule::permit(
+        let party = PartyId::new(7);
+        let policy = Abac::new().rule(permit(
             "party-seven-federated",
-            Condition::all_of([
-                Condition::equals(Attribute::Party, PartyId::new(7).to_string()),
-                Condition::not_equals(Attribute::Class, "anonymous"),
-            ]),
+            &format!("party = '{party}' and class <> 'anonymous'"),
         ));
 
         assert_eq!(
@@ -261,9 +370,10 @@ mod tests {
 
     #[test]
     fn a_rule_says_its_name_and_its_effect() {
-        let rule = Rule::deny("closed", Condition::all_of([]));
+        let rule = Rule::deny("closed", Expression::everything()).expect("a rule");
 
         assert_eq!(rule.name(), "closed");
         assert_eq!(rule.effect(), Effect::Deny);
+        assert_eq!(rule.condition().text(), "true");
     }
 }

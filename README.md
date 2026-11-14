@@ -1,6 +1,14 @@
 # xmip-core-authorize-abac
 
-Attribute-based authorization: rules that permit or deny where attributes of the identity's facts and the attempt compare with values by equals, not-equals, in and starts-with, combined with all-of and any-of. A technology of [xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
+Attribute-based authorization: rules that permit or deny where a condition holds over attributes of the identity's facts and the attempt. A technology of [xmip-core-authorize](https://github.com/IlleNilsson/xmip-core-authorize).
+
+A condition is written in Xmip's one expression language, [xmip-core-path](https://github.com/IlleNilsson/xmip-core-path)'s `expression` (ADR-0066 clause 2), over the attributes' names: `mechanism`, `class`, `assurance`, `party`, `value`, `action`, `artifact`, `location`, `contract`, `path`, and `evidence:` before a claim's name.
+
+```text
+evidence:department = 'billing' and action in ('send', 'process') and location like 'Billing%'
+```
+
+An attribute the record does not carry is unknown, and only a condition that is true applies. A rule whose condition reads a name that is no attribute is refused when it is made. A prefix rule is `Attribute::starts_with`, which writes `like 'prefix%' escape '\'`, so a `%`, `_` or `\` in the prefix matches only itself.
 
 ## Toolchain
 

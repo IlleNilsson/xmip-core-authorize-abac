@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/IlleNilsson/xmip-core-authorize-abac"
-description = "Attribute-based authorization: rules that permit or deny where attributes of the identity's facts and the attempt compare with values by equals, not-equals, in and starts-with, combined with all-of and any-of. A xmip-core-authorize technology."
+description = "Attribute-based authorization: rules that permit or deny where a condition in Xmip's one expression language holds over attributes of the identity's facts and the attempt. A xmip-core-authorize technology."
 publish = false
 
 [lib]
@@ -16,9 +16,12 @@ path = "src/lib.rs"
 [dependencies]
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The facts it judges are context's and the layer it
-# answers for is core's; standard library otherwise.
+# answers for is core's; a rule's condition is written in Xmip's one
+# expression language, path's (ADR-0066 clause 2); standard library
+# otherwise.
 authorize = { package = "xmip-core-authorize", git = "https://github.com/IlleNilsson/xmip-core-authorize", branch = "main" }
 context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
+path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
 xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 
 [lints.rust]
