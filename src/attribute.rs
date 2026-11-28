@@ -3,7 +3,7 @@
 
 use authorize::{Action, Attempt};
 use context::IdentityFacts;
-use path::expression::{Condition, Names, Operand};
+use expression::{Condition, Names, Operand};
 use std::cell::OnceCell;
 use std::fmt;
 use xcore::Assurance;
@@ -87,7 +87,7 @@ impl Attribute {
     }
 
     /// It begins with `prefix`, every `%`, `_` and `\` in the prefix
-    /// matching only itself (`path::expression::Condition::starts_with`):
+    /// matching only itself (`expression::Condition::starts_with`):
     /// a rule about a Party's or a Location's prefix names that prefix and
     /// nothing wider.
     #[must_use]

@@ -14,12 +14,13 @@ path = "src/lib.rs"
 # A Technology depends on its parent Capability, never the reverse
 # (repository-model.md). The facts it judges are context's and the layer it
 # answers for is core's; a rule's condition is written in Xmip's one
-# expression language, path's (ADR-0066 clause 2); standard library
+# expression language, a capability of its own (ADR-0066 clause 2;
+# amendment 2026-11-28); standard library
 # otherwise.
-authorize = { package = "xmip-core-authorize", git = "https://github.com/IlleNilsson/xmip-core-authorize", branch = "main" }
-context = { package = "xmip-core-context", git = "https://github.com/IlleNilsson/xmip-core-context", branch = "main" }
-path = { package = "xmip-core-path", git = "https://github.com/IlleNilsson/xmip-core-path", branch = "main" }
-xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
+authorize = { workspace = true }
+context = { workspace = true }
+expression = { workspace = true }
+xcore = { workspace = true }
 
 [lints]
 workspace = true

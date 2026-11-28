@@ -26,7 +26,7 @@ pub mod attribute;
 use attribute::Read;
 use authorize::{Attempt, AuthorizeError, Authorizer, Decision};
 use context::IdentityFacts;
-use path::expression::Expression;
+use expression::Expression;
 use xcore::Layer;
 
 pub use attribute::{Attribute, EVIDENCE};
